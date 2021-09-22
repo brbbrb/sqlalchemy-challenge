@@ -39,8 +39,10 @@ def home():
         f"/api/v1.0/precipitation<br/>"
         f"/api/v1.0/stations<br/>"
         f"/api/v1.0/tobs<br/>"
-        f"/api/v1.0/<start><br/>"
-        f"/api/v1.0/<start>/<end><br/>"
+        f"/api/v1.0/start_date<br/>"
+        f"/api/v1.0/start_date/end_date<br/>"
+        f"<br/>"
+        f"NOTE: Please enter a start and end date before 2017-08-23<br/>"
         f"<br>"
         )
 
@@ -65,7 +67,7 @@ def precipitation():
     # Return JSON representation of your dictionary
     return jsonify(dt_and_prcp_dict)
 
-@app_route("/api/v1.0/stations")
+@app.route("/api/v1.0/stations")
 def stations():
     print("Server recieved request for 'stations' page...")
 
@@ -81,7 +83,7 @@ def stations():
     # Return JSON list of stations from dataset
     return jsonify(stations)
 
-@app_route("/api/v1.0/tobs")
+@app.route("/api/v1.0/tobs")
 def tobs():
     print("Server recieved request for 'tobs' (temperature observation) page...")
 
@@ -102,7 +104,7 @@ def tobs():
     # Perform a query to retrieve the tobs for the last year
     most_active_tobs = session.query(measurement.date, measurement.tobs).\
         filter((measurement.station ==most_active_sta)\
-        & measurement.date >=year_ago)\
+        & (measurement.date >=year_ago)\
         & (measurement.date <= most_recent_dt)).all()
 
     # Close session
@@ -111,5 +113,47 @@ def tobs():
     # Return JSON list of stations from dataset
     return jsonify(most_active_tobs)
 
-@app_route("/api/v1.0/<start>")
-def start():
+@app.route("/api/v1.0/<start>")
+def temps_from_start(start):
+    print("Server recieved request for daily temperature from {start}...")
+
+    # Create session from Python to database
+    session = Session(engine)
+
+    # Perform a query to retrieve temperature values greater to or equal to start date
+    results = session.query(func.min(measurement.tobs).label('min_temp'), func.max(measurement.tobs).label('max_temp'), func.avg(measurement.tobs).label('avg_temp'))\
+        .filter(measurement.date >= start).all()
+    session.close()
+    stats_tobs = []
+    for r in results:
+        tobs_dict = {}
+        tobs_dict['min_temp'] = r.min_temp
+        tobs_dict['max_temp'] = r.max_temp
+        tobs_dict['avg_temp'] = r.avg_temp
+
+        stats_tobs.append(tobs_dict)
+
+    return jsonify(f"Start date:{start}",stats_tobs)
+
+@app.route("/api/v1.0/<start>/<end>")
+def stats_end(start,end):
+    # Create our session (link) from Python to the DB
+    session = Session(engine)
+    results = session.query(func.min(measurement.tobs).label('min_temp'), func.max(measurement.tobs).label('max_temp'), func.avg(measurement.tobs).label('avg_temp'))\
+        .filter(measurement.date >= start)\
+        .filter(measurement.date<= end).all()
+    session.close()
+    stats_tobs = []
+    for r in results:
+        tobs_dict = {}
+        tobs_dict['min_temp'] = r.min_temp
+        tobs_dict['max_temp'] = r.max_temp
+        tobs_dict['avg_temp'] = r.avg_temp
+
+        stats_tobs.append(tobs_dict)
+
+    return jsonify(f"Start date:{start}",f"End date:{end}",stats_tobs)
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
